@@ -1,0 +1,29 @@
+{
+    "schemaVersion": 1,
+    "id": "capeshow",
+    "version": "${version}",
+    "name": "CapeShow",
+    "description": "A mod to manage and animate capes in Minecraft",
+    "authors": [
+      "kill0es"
+    ],
+    "contact": {
+      "homepage": "https://quansen88.github.io/",
+      "sources": "https://github.com/kill0es/cape-show-for-mine-craft"
+    },
+    "license": "MIT",
+    "icon": "assets/capeshow/icon.png",
+    "environment": "*",
+    "entrypoints": {
+      "main": [
+        "com.example.capeshow.CapeShow"
+      ]
+    },
+    "mixins": [],
+    "depends": {
+      "fabricloader": ">=0.14.12",
+      "fabric": "*",
+      "minecraft": "1.21.4"
+    }
+  }
+  
