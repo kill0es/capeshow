@@ -1,29 +1,44 @@
 {
-    "schemaVersion": 1,
-    "id": "capeshow",
-    "version": "${version}",
-    "name": "CapeShow",
-    "description": "A mod to manage and animate capes in Minecraft",
-    "authors": [
-      "kill0es"
+  "schemaVersion": 1, // 配置文件版本，固定为1
+  "id": "cape_show", // 模组的唯一标识符（命名空间）
+  "version": "1.0.0", // 模组版本号
+  "name": "CapeShow", // 模组名称
+  "description": "A mod that tracks and animates player capes.", // 模组描述
+  "authors": [
+    "YourName" // 作者名称
+  ],
+  "contact": {
+    "homepage": "https://example.com", // 模组主页
+    "sources": "https://github.com/yourusername/capeshow-mod", // 源代码仓库
+    "issues": "https://github.com/yourusername/capeshow-mod/issues" // 问题追踪链接
+  },
+  "license": "MIT", // 模组许可证
+  "icon": "assets/capeshow/icon.png", // 模组图标路径
+  "environment": "*", // 模组运行环境（*表示客户端和服务端均可）
+  "entrypoints": {
+    "main": [ // 主入口点
+      "net.capeshow.CapeShowMod"
     ],
-    "contact": {
-      "homepage": "https://quansen88.github.io/",
-      "sources": "https://github.com/kill0es/cape-show-for-mine-craft"
-    },
-    "license": "MIT",
-    "icon": "assets/capeshow/icon.png",
-    "environment": "*",
-    "entrypoints": {
-      "main": [
-        "com.example.capeshow.CapeShow"
-      ]
-    },
-    "mixins": [],
-    "depends": {
-      "fabricloader": ">=0.14.12",
-      "fabric": "*",
-      "minecraft": "1.21.4"
+    "client": [ // 客户端入口点
+      "net.capeshow.client.CapeShowClientMod"
+    ]
+  },
+  "mixins": [ // Mixin配置文件
+    "capeshow.mixins.json"
+  ],
+  "depends": { // 依赖项
+    "fabricloader": ">=0.14.21", // Fabric Loader最低版本
+    "fabric-api": "*", // Fabric API依赖
+    "minecraft": "~1.20.4" // Minecraft版本范围
+  },
+  "suggests": { // 建议的依赖项（非强制）
+    "modmenu": ">=4.0.0" // Mod Menu模组
+  },
+  "custom": { // 自定义字段
+    "modmenu": { // Mod Menu集成配置
+      "links": {
+        "modmenu.discord": "https://discord.gg/yourinvite" // Discord链接
+      }
     }
   }
-  
+}
