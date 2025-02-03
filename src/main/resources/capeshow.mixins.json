@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "net.capeshow.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "MixinPlayerEntityRenderer"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
