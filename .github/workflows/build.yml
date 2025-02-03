@@ -12,7 +12,7 @@ jobs:
 
     steps:
       # ----------------------------------
-      # 1. 检出代码仓库
+      # 1. 检出代码仓库（关键第一步）
       # ----------------------------------
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,21 +20,38 @@ jobs:
           fetch-depth: 0  # 必须！确保检出完整历史
 
       # ----------------------------------
-      # 2. 自动生成Gradle Wrapper（核心修复）
+      # 2. 修复gradlew执行权限（立即处理）
       # ----------------------------------
-      - name: Generate Gradle Wrapper
-        uses: gradle/gradle-build-action@v3
-        with:
-          arguments: wrapper --gradle-version 8.5  # 指定与项目兼容的Gradle版本
+      - name: Fix gradlew permissions
+        run: |
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            echo "Fixed gradlew permissions"
+          else
+            echo "No gradlew found, will generate new wrapper"
+          fi
 
       # ----------------------------------
-      # 3. 验证Wrapper完整性
+      # 3. 动态生成Gradle Wrapper（智能判断）
+      # ----------------------------------
+      - name: Setup Gradle Wrapper
+        uses: gradle/gradle-build-action@v3
+        with:
+          # 如果检测到已有wrapper.properties则使用现有配置，否则创建新wrapper
+          gradle-version: 8.5  # 指定与项目兼容的版本
+          arguments: |
+            ! -f gradle/wrapper/gradle-wrapper.properties && 
+            gradle wrapper --gradle-version 8.5 --distribution-type bin || 
+            echo "Using existing wrapper"
+
+      # ----------------------------------
+      # 4. 二次验证Wrapper完整性（保险措施）
       # ----------------------------------
       - name: Validate Gradle Wrapper
         uses: gradle/wrapper-validation-action@v2
 
       # ----------------------------------
-      # 4. 缓存优化
+      # 5. 缓存优化（提升构建速度）
       # ----------------------------------
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
@@ -45,7 +62,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
       # ----------------------------------
-      # 5. Java环境配置
+      # 6. Java环境配置
       # ----------------------------------
       - name: Set up Java 17
         uses: actions/setup-java@v3
@@ -54,16 +71,22 @@ jobs:
           distribution: temurin
 
       # ----------------------------------
-      # 6. 执行构建（使用生成的Wrapper）
+      # 7. 执行构建（最终验证）
       # ----------------------------------
       - name: Build with Gradle
         run: |
-          chmod +x gradlew  # 确保执行权限
-          ./gradlew build --no-daemon
+          # 确保Wrapper存在
+          if [ ! -f "gradlew" ]; then
+            echo "Error: gradlew still missing!"
+            exit 1
+          fi
+          
+          # 执行构建
+          ./gradlew clean build --no-daemon
           ls -l build/libs/
 
       # ----------------------------------
-      # 7. 产物上传
+      # 8. 产物上传
       # ----------------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v4
