@@ -19,7 +19,7 @@ jobs:
 
       # 2. 验证Gradle Wrapper
       - name: Validate Gradle Wrapper
-        uses: gradle/wrapper-validation-action@v2
+        uses: gradle/actions/wrapper-validation@v4
 
       # 3. 缓存Gradle依赖
       - name: Cache Gradle dependencies
