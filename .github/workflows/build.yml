@@ -1,61 +1,72 @@
-# 定义工作流程的名称
-name: Compile Minecraft Mod
+name: Build
 
-# 指定触发工作流程的事件
 on:
   push:
-    branches: [ main ]  # 假设你的主分支是 'main'
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
-# 定义工作(job)
 jobs:
   build:
-    # 指定运行环境
     runs-on: ubuntu-latest
 
     steps:
-    # 使用 actions/checkout@v3 步骤来克隆仓库代码
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0  # 获取所有历史提交
+      # ----------------------------------
+      # 1. 检出代码仓库
+      # ----------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 必须！确保检出完整历史
 
-    # 设置 Java 环境
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'  # 使用 Temurin 发行版
+      # ----------------------------------
+      # 2. 自动生成Gradle Wrapper（核心修复）
+      # ----------------------------------
+      - name: Generate Gradle Wrapper
+        uses: gradle/gradle-build-action@v3
+        with:
+          arguments: wrapper --gradle-version 8.5  # 指定与项目兼容的Gradle版本
 
-    # 设置 Gradle 环境
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
+      # ----------------------------------
+      # 3. 验证Wrapper完整性
+      # ----------------------------------
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v2
 
-    # 确保 gradlew 是可执行的
-    - name: Make gradlew executable
-      run: chmod +x gradlew
+      # ----------------------------------
+      # 4. 缓存优化
+      # ----------------------------------
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
-    # 执行 Gradle 构建任务
-    - name: Build with Gradle
-      run: |
-        ./gradlew build --stacktrace
+      # ----------------------------------
+      # 5. Java环境配置
+      # ----------------------------------
+      - name: Set up Java 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: temurin
 
-    # 确保 build/libs 目录存在（如果构建步骤未创建）
-    - name: Ensure directory exists
-      run: mkdir -p build/libs || true  # 忽略可能的错误
+      # ----------------------------------
+      # 6. 执行构建（使用生成的Wrapper）
+      # ----------------------------------
+      - name: Build with Gradle
+        run: |
+          chmod +x gradlew  # 确保执行权限
+          ./gradlew build --no-daemon
+          ls -l build/libs/
 
-    # 上传构建产物
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v4
-      if: success()
-      with:
-        name: MinecraftMod
-        path: build/libs/*.jar  # 只上传 JAR 文件
-
-    # 注释掉的发布步骤，因为通常这不是每一次构建都需要的
-    # - name: Publish to GitHub Packages
-    #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    #   run: |
-    #     ./gradlew publish
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # ----------------------------------
+      # 7. 产物上传
+      # ----------------------------------
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CapeShow-Mod
+          path: build/libs/*.jar
