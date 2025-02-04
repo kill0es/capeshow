@@ -98,10 +98,10 @@ capeshow-mod/
   ```json
 git clone https://github.com/your-repo/capeshow-mod.git
 cd capeshow-mod
-
+  ```
 
 	2.	使用 Gradle 构建模组
-
+  ```json
 ./gradlew build
   ```
 构建成功后，生成的 .jar 文件将位于 build/libs/ 目录下。
