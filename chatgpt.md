@@ -760,9 +760,9 @@ public class ModConfig {
     "animationInterval": 20,
     "mode": "ROTATE"
   }
-
-\\animationInterval：披风动画更新间隔（单位：Tick）。
-\\mode：披风动画模式，例如 ROTATE（轮播）等。
+  ```
+   animationInterval：披风动画更新间隔（单位：Tick）。
+   mode：披风动画模式，例如 ROTATE（轮播）等。
 
 开发者指南
 
