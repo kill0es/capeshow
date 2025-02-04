@@ -1,95 +1,95 @@
-name: Build
+# 文件：.github/workflows/build.yml
+# 描述：GitHub Actions 工作流配置，用于自动构建 Fabric 模组，
+#        并在发布 Release 时将生成的 .jar 文件上传到 GitHub Releases 及 Artifact 存储。
+name: Build CapeShow Mod
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+      - master
+  workflow_dispatch: # 允许手动触发
+  release:
+    types: [created] # 在发布 Release 时自动构建并上传文件
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # ----------------------------------
-      # 1. 检出代码仓库（关键第一步）
-      # ----------------------------------
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v3
         with:
-          fetch-depth: 0  # 必须！确保检出完整历史
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
 
-      # ----------------------------------
-      # 2. 修复gradlew执行权限（立即处理）
-      # ----------------------------------
-      - name: Fix gradlew permissions
-        run: |
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-            echo "Fixed gradlew permissions"
-          else
-            echo "No gradlew found, will generate new wrapper"
-          fi
-
-      # ----------------------------------
-      # 3. 动态生成Gradle Wrapper（智能判断）
-      # ----------------------------------
-      - name: Setup Gradle Wrapper
-        uses: gradle/gradle-build-action@v3
-        with:
-          # 如果检测到已有wrapper.properties则使用现有配置，否则创建新wrapper
-          gradle-version: 8.5  # 指定与项目兼容的版本
-          arguments: |
-            ! -f gradle/wrapper/gradle-wrapper.properties && 
-            gradle wrapper --gradle-version 8.5 --distribution-type bin || 
-            echo "Using existing wrapper"
-
-      # ----------------------------------
-      # 4. 二次验证Wrapper完整性（保险措施）
-      # ----------------------------------
       - name: Validate Gradle Wrapper
         uses: gradle/wrapper-validation-action@v2
 
-      # ----------------------------------
-      # 5. 缓存优化（提升构建速度）
-      # ----------------------------------
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
+      - name: Cache Gradle
+        uses: actions/cache@v3
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
 
-      # ----------------------------------
-      # 6. Java环境配置
-      # ----------------------------------
-      - name: Set up Java 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: 17
-          distribution: temurin
+      - name: Build Fabric Mod
+        run: ./gradlew build --stacktrace
 
-      # ----------------------------------
-      # 7. 执行构建（最终验证）
-      # ----------------------------------
-      - name: Build with Gradle
-        run: |
-          # 确保Wrapper存在
-          if [ ! -f "gradlew" ]; then
-            echo "Error: gradlew still missing!"
-            exit 1
-          fi
-          
-          # 执行构建
-          ./gradlew clean build --no-daemon
-          ls -l build/libs/
+      - name: List build/libs directory
+        run: ls -lah build/libs/
 
-      # ----------------------------------
-      # 8. 产物上传
-      # ----------------------------------
-      - name: Upload artifact
+      - name: Get JAR filename
+        id: get_jar
+        run: echo "JAR_NAME=$(ls build/libs | grep '\.jar$' | head -n 1)" >> $GITHUB_ENV
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: CapeShow-Mod
-          path: build/libs/*.jar
+          path: build/libs/${{ env.JAR_NAME }}
+          retention-days: 7
+
+  release:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download JAR Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CapeShow-Mod
+          path: build/libs/
+
+      - name: Get JAR filename
+        id: get_jar
+        run: echo "JAR_NAME=$(ls build/libs | grep '\.jar$' | head -n 1)" >> $GITHUB_ENV
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/${{ env.JAR_NAME }}
+          body: |
+            🚀 **Cape Show Mod v${{ github.event.release.tag_name }}**
+            - Compatible with Fabric Loader
+            - Supports Minecraft 1.19+
+            - Place the `.jar` in your `mods/` folder
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
