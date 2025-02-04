@@ -96,13 +96,13 @@ capeshow-mod/
 构建 & 编译
 	1.	克隆仓库
   ```json
-git clone https://github.com/your-repo/capeshow-mod.git
-cd capeshow-mod
+  git clone https://github.com/your-repo/capeshow-mod.git
+  cd capeshow-mod
   ```
 
-	2.	使用 Gradle 构建模组
+  2.	使用 Gradle 构建模组
   ```json
-./gradlew build
+  ./gradlew build
   ```
 构建成功后，生成的 .jar 文件将位于 build/libs/ 目录下。
 
