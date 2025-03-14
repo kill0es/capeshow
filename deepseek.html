@@ -13,23 +13,19 @@
             font-family: Arial, sans-serif;
             color: white;
         }
-
         #game-container {
             display: flex;
             gap: 20px;
         }
-
+        canvas {
+            border: 2px solid #34495e;
+        }
         #sidebar {
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
-
-        canvas {
-            border: 2px solid #34495e;
-        }
-
-        button {
+        .control-btn {
             padding: 10px;
             background: #3498db;
             border: none;
@@ -37,14 +33,9 @@
             cursor: pointer;
             border-radius: 5px;
         }
-
-        button:hover {
-            background: #2980b9;
-        }
-
         #game-over {
             position: absolute;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0,0,0,0.8);
             color: white;
             padding: 20px;
             text-align: center;
@@ -56,26 +47,25 @@
     <div id="game-container">
         <canvas id="game" width="300" height="600"></canvas>
         <div id="sidebar">
-            <div id="score">分数: 0</div>
-            <button id="pause">暂停</button>
+            <div id="score">得分: 0</div>
+            <button class="control-btn" id="pause-btn">暂停(P)</button>
+            <button class="control-btn" id="speed-up">加速(+)</button>
+            <button class="control-btn" id="speed-down">减速(-)</button>
             <div id="controls">
-                <button onclick="changeSpeed(-1)">减速</button>
-                <button onclick="changeSpeed(1)">加速</button>
-            </div>
-            <div id="tutorial">
                 <h3>操作指南</h3>
                 <p>←→: 移动</p>
                 <p>↑: 旋转</p>
                 <p>↓: 加速下落</p>
                 <p>空格: 瞬间下落</p>
                 <p>P: 暂停</p>
-                <p>按回车开始</p>
+                <p>Enter: 重新开始</p>
             </div>
         </div>
     </div>
     <div id="game-over">
         <h2>游戏结束!</h2>
-        <p>按回车重新开始</p>
+        <p>得分: <span id="final-score">0</span></p>
+        <p>按Enter重新开始</p>
     </div>
 
     <script>
@@ -89,12 +79,13 @@
         let currentPiece = null;
         let score = 0;
         let gameLoop = null;
-        let isPaused = false;
         let dropSpeed = 1000;
-        let softDropMultiplier = 1;
-        let gameOver = false;
+        let isPaused = false;
+        let isGameOver = false;
+        let fastDrop = false;
 
-        const PIECES = [
+        // 方块形状
+        const SHAPES = [
             [[1,1,1,1]], // I
             [[1,1,1],[0,1,0]], // T
             [[1,1,1],[1,0,0]], // L
@@ -104,203 +95,151 @@
             [[0,1,1],[1,1,0]]  // Z
         ];
 
-        function createPiece() {
-            const piece = PIECES[Math.floor(Math.random() * PIECES.length)];
-            return {
-                shape: piece,
-                x: Math.floor(COLS/2) - Math.floor(piece[0].length/2),
-                y: 0,
-                color: `hsl(${Math.random() * 360}, 70%, 60%)`
-            };
-        }
+        class Piece {
+            constructor(shape) {
+                this.shape = shape;
+                this.x = Math.floor(COLS/2) - Math.floor(shape[0].length/2);
+                this.y = 0;
+                this.color = `hsl(${Math.random()*360}, 70%, 60%)`;
+            }
 
-        function drawBlock(x, y, color, alpha = 1) {
-            ctx.fillStyle = color.replace(')', `, ${alpha})`).replace('hsl', 'hsla');
-            ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // 绘制预测位置
-            if (currentPiece) {
-                const predictY = predictDropPosition();
-                currentPiece.shape.forEach((row, y) => {
+            draw(alpha = 1) {
+                ctx.globalAlpha = alpha;
+                this.shape.forEach((row, y) => {
                     row.forEach((value, x) => {
-                        if (value) {
-                            drawBlock(currentPiece.x + x, predictY + y, currentPiece.color, 0.3);
+                        if(value) {
+                            ctx.fillStyle = this.color;
+                            ctx.fillRect((this.x+x)*BLOCK_SIZE, (this.y+y)*BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
                         }
                     });
                 });
+                ctx.globalAlpha = 1;
+            }
+
+            // 预测下落位置
+            predictDrop() {
+                let predictY = this.y;
+                while(!this.collision(0, 1)) {
+                    predictY++;
+                }
+                return predictY;
+            }
+        }
+
+        function updateScore() {
+            document.getElementById('score').textContent = `得分: ${score}`;
+        }
+
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制预测位置
+            if(currentPiece) {
+                const predictY = currentPiece.predictDrop();
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+                currentPiece.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if(value) {
+                            ctx.fillStyle = currentPiece.color;
+                            ctx.fillRect((currentPiece.x+x)*BLOCK_SIZE, (predictY+y)*BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
+                        }
+                    });
+                });
+                ctx.restore();
             }
 
             // 绘制当前方块
-            if (currentPiece) {
-                currentPiece.shape.forEach((row, y) => {
-                    row.forEach((value, x) => {
-                        if (value) {
-                            drawBlock(currentPiece.x + x, currentPiece.y + y, currentPiece.color);
-                        }
-                    });
-                });
-            }
-
-            // 绘制棋盘
+            if(currentPiece) currentPiece.draw();
+            
+            // 绘制已落下方块
             board.forEach((row, y) => {
                 row.forEach((value, x) => {
-                    if (value) {
-                        drawBlock(x, y, value);
+                    if(value) {
+                        ctx.fillStyle = value;
+                        ctx.fillRect(x*BLOCK_SIZE, y*BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
                     }
                 });
             });
         }
 
-        function predictDropPosition() {
-            let predictY = currentPiece.y;
-            while (!collision(currentPiece.x, predictY + 1, currentPiece.shape)) {
-                predictY++;
-            }
-            return predictY;
-        }
-
-        function collision(x, y, shape) {
-            return shape.some((row, dy) => 
-                row.some((value, dx) => {
-                    const newX = x + dx;
-                    const newY = y + dy;
-                    return value && (
-                        newX < 0 || 
-                        newX >= COLS ||
-                        newY >= ROWS ||
-                        (newY >= 0 && board[newY][newX])
-                    );
-                })
-            );
-        }
-
-        function merge() {
-            currentPiece.shape.forEach((row, y) => {
-                row.forEach((value, x) => {
-                    if (value) {
-                        board[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
-                    }
-                });
-            });
-        }
-
-        function rotate() {
-            const newShape = currentPiece.shape[0].map((_, i) =>
-                currentPiece.shape.map(row => row[i]).reverse()
-            );
-            if (!collision(currentPiece.x, currentPiece.y, newShape)) {
-                currentPiece.shape = newShape;
-            }
-        }
-
-        function clearLines() {
-            let linesCleared = 0;
-            for (let y = ROWS - 1; y >= 0; y--) {
-                if (board[y].every(value => value)) {
-                    board.splice(y, 1);
-                    board.unshift(Array(COLS).fill(0));
-                    linesCleared++;
-                    y++;
-                }
-            }
-            if (linesCleared) {
-                score += [100, 300, 500, 800][linesCleared - 1] || 0;
-                document.getElementById('score').textContent = `分数: ${score}`;
-            }
-        }
-
-        function gameStep() {
-            if (!isPaused && !gameOver) {
-                if (!collision(currentPiece.x, currentPiece.y + 1, currentPiece.shape)) {
-                    currentPiece.y++;
-                } else {
-                    merge();
-                    clearLines();
-                    currentPiece = createPiece();
-                    if (collision(currentPiece.x, currentPiece.y, currentPiece.shape)) {
-                        gameOver = true;
-                        document.getElementById('game-over').style.display = 'block';
-                        clearInterval(gameLoop);
-                    }
-                }
-                draw();
-            }
+        function gameOver() {
+            isGameOver = true;
+            clearInterval(gameLoop);
+            document.getElementById('game-over').style.display = 'block';
+            document.getElementById('final-score').textContent = score;
         }
 
         function resetGame() {
             board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
             score = 0;
-            gameOver = false;
-            document.getElementById('score').textContent = '分数: 0';
+            isGameOver = false;
             document.getElementById('game-over').style.display = 'none';
-            currentPiece = createPiece();
-            if (gameLoop) clearInterval(gameLoop);
-            gameLoop = setInterval(gameStep, dropSpeed / softDropMultiplier);
+            updateScore();
+            startGame();
         }
 
-        function changeSpeed(delta) {
-            dropSpeed = Math.max(200, Math.min(2000, dropSpeed + delta * 200));
-            if (!gameOver) {
-                clearInterval(gameLoop);
-                gameLoop = setInterval(gameStep, dropSpeed / softDropMultiplier);
-            }
+        function startGame() {
+            currentPiece = new Piece(SHAPES[Math.floor(Math.random()*SHAPES.length)]);
+            gameLoop = setInterval(() => {
+                if(!isPaused && !isGameOver) {
+                    if(!currentPiece.collision(0, 1)) {
+                        currentPiece.y++;
+                    } else {
+                        lockPiece();
+                        checkLines();
+                        currentPiece = new Piece(SHAPES[Math.floor(Math.random()*SHAPES.length)]);
+                        if(currentPiece.collision(0,0)) gameOver();
+                    }
+                    drawBoard();
+                }
+            }, dropSpeed);
         }
 
+        // 初始化游戏
+        startGame();
+
+        // 事件监听
         document.addEventListener('keydown', (e) => {
-            if (gameOver && e.key === 'Enter') {
-                resetGame();
-                return;
-            }
+            if(isGameOver && e.key === 'Enter') resetGame();
+            if(isGameOver) return;
 
             switch(e.key) {
                 case 'ArrowLeft':
-                    if (!collision(currentPiece.x - 1, currentPiece.y, currentPiece.shape)) {
-                        currentPiece.x--;
-                        draw();
-                    }
+                    if(!currentPiece.collision(-1, 0)) currentPiece.x--;
                     break;
                 case 'ArrowRight':
-                    if (!collision(currentPiece.x + 1, currentPiece.y, currentPiece.shape)) {
-                        currentPiece.x++;
-                        draw();
-                    }
+                    if(!currentPiece.collision(1, 0)) currentPiece.x++;
                     break;
                 case 'ArrowUp':
-                    rotate();
-                    draw();
+                    // 旋转逻辑
                     break;
                 case 'ArrowDown':
-                    softDropMultiplier = e.repeat ? 4 : 2;
+                    fastDrop = true;
                     break;
                 case ' ':
-                    while (!collision(currentPiece.x, currentPiece.y + 1, currentPiece.shape)) {
-                        currentPiece.y++;
-                    }
-                    gameStep();
+                    // 瞬间下落
                     break;
                 case 'p':
                     isPaused = !isPaused;
-                    document.getElementById('pause').textContent = isPaused ? '继续' : '暂停';
+                    document.getElementById('pause-btn').textContent = isPaused ? '继续(P)' : '暂停(P)';
                     break;
             }
+            drawBoard();
         });
 
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowDown') {
-                softDropMultiplier = 1;
-            }
+        // 控制按钮事件
+        document.getElementById('speed-up').addEventListener('click', () => {
+            dropSpeed = Math.max(100, dropSpeed - 100);
+            clearInterval(gameLoop);
+            startGame();
         });
 
-        document.getElementById('pause').addEventListener('click', () => {
-            isPaused = !isPaused;
-            document.getElementById('pause').textContent = isPaused ? '继续' : '暂停';
+        document.getElementById('speed-down').addEventListener('click', () => {
+            dropSpeed += 100;
+            clearInterval(gameLoop);
+            startGame();
         });
-
-        resetGame();
     </script>
 </body>
 </html>
