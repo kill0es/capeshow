@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris with Developer Mode Features</title>
+    <title>Tetris Game</title>
     <style>
         body {
             background-color: #333; /* 偏黑色背景 */
@@ -13,38 +13,63 @@
             height: 100vh;
             margin: 0;
             font-family: Arial, sans-serif;
-            color: white;
         }
         #game-container {
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        #game-canvas, #preview-canvas {
-            border: 2px solid white;
-            background-color: #555; /* 游戏区域灰色背景 */
+        #game-canvas {
+            background-color: #1a1a1a; /* 游戏区域灰色背景 */
+            border: 2px solid #fff;
+        }
+        #next-piece {
+            margin-top: 20px;
+            background-color: #1a1a1a;
+            border: 2px solid #fff;
+        }
+        #scoreboard {
+            color: #fff;
+            font-size: 20px;
+            margin-top: 10px;
         }
         #controls {
             margin-top: 20px;
+            color: #fff;
         }
         button {
-            padding: 10px 20px;
             margin: 0 10px;
-            cursor: pointer;
-            background-color: #777;
-            color: white;
+            padding: 10px 20px;
+            background-color: #555;
+            color: #fff;
             border: none;
-            border-radius: 5px;
+            cursor: pointer;
         }
         button:hover {
-            background-color: #999;
+            background-color: #777;
         }
         #tutorial {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
             padding: 20px;
             border-radius: 10px;
-            max-width: 300px;
+            text-align: center;
+            display: none;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
             display: none;
         }
     </style>
@@ -52,131 +77,204 @@
 <body>
     <div id="game-container">
         <canvas id="game-canvas" width="300" height="600"></canvas>
-        <canvas id="preview-canvas" width="120" height="120"></canvas>
+        <canvas id="next-piece" width="120" height="120"></canvas>
+        <div id="scoreboard">Score: 0</div>
         <div id="controls">
-            <button id="pause-btn">Pause</button>
-            <button id="speed-up-btn">Speed Up</button>
-            <button id="speed-down-btn">Speed Down</button>
+            <button id="pause">Pause</button>
+            <button id="speed-up">Speed Up</button>
+            <button id="speed-down">Speed Down</button>
         </div>
-        <div id="tutorial">
-            <h3>Game Tutorial</h3>
-            <p>Arrow Left/Right: Move piece</p>
-            <p>Arrow Up: Rotate piece</p>
-            <p>Arrow Down: Drop faster</p>
-            <p>Triple Arrow Down: Instant drop</p>
-            <p>Space: Pause/Resume</p>
-            <p>Enter: Skip tutorial</p>
-        </div>
+    </div>
+    <div id="tutorial">
+        <h2>Game Tutorial</h2>
+        <p>Left Arrow: Move Left</p>
+        <p>Right Arrow: Move Right</p>
+        <p>Up Arrow: Rotate</p>
+        <p>Down Arrow: Soft Drop (Hold to Accelerate, Double Press + Hold for Fast Drop)</p>
+        <p>Down Arrow (Triple Press): Hard Drop</p>
+        <p>P: Pause</p>
+        <p>Enter: Skip Tutorial / Restart Game</p>
+    </div>
+    <div id="game-over">
+        <h2>Game Over</h2>
+        <p>Your Score: <span id="final-score"></span></p>
+        <p>Press Enter to Restart</p>
     </div>
 
     <script>
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
-        const previewCanvas = document.getElementById('preview-canvas');
-        const previewCtx = previewCanvas.getContext('2d');
-        const gridSize = 30;
-        const cols = canvas.width / gridSize;
-        const rows = canvas.height / gridSize;
-        let board = Array(rows).fill().map(() => Array(cols).fill(0));
+        const nextCanvas = document.getElementById('next-piece');
+        const nextCtx = nextCanvas.getContext('2d');
+        const scoreElement = document.getElementById('scoreboard');
+        const tutorialElement = document.getElementById('tutorial');
+        const gameOverElement = document.getElementById('game-over');
+        const finalScoreElement = document.getElementById('final-score');
+        const pauseButton = document.getElementById('pause');
+        const speedUpButton = document.getElementById('speed-up');
+        const speedDownButton = document.getElementById('speed-down');
+
+        const BLOCK_SIZE = 30;
+        const BOARD_WIDTH = canvas.width / BLOCK_SIZE;
+        const BOARD_HEIGHT = canvas.height / BLOCK_SIZE;
+        const NEXT_SIZE = 4;
+
+        let board = Array(BOARD_HEIGHT).fill().map(() => Array(BOARD_WIDTH).fill(0));
         let currentPiece = null;
         let nextPiece = null;
+        let score = 0;
         let gameOver = false;
-        let paused = false;
+        let isPaused = false;
+        let dropSpeed = 1000; // 初始下落速度（毫秒）
+        let lastDropTime = 0;
         let dropCounter = 0;
-        let dropInterval = 1000; // 初始下落速度 (ms)
-        let lastTime = 0;
-        let downPressCount = 0; // 跟踪下键按压次数
-        let downPressTimer = null; // 用于检测三连按
+        let downKeyPresses = 0;
+        let downKeyLastPressTime = 0;
+        let isDownHeld = false;
 
-        const pieces = [
+        const SHAPES = [
             [[1, 1, 1, 1]], // I
             [[1, 1], [1, 1]], // O
             [[1, 1, 1], [0, 1, 0]], // T
             [[1, 1, 1], [1, 0, 0]], // L
             [[1, 1, 1], [0, 0, 1]], // J
             [[1, 1, 0], [0, 1, 1]], // S
-            [[0, 1, 1], [1, 1, 0]] // Z
+            [[0, 1, 1], [1, 1, 0]]  // Z
         ];
 
-        const colors = [
-            'cyan', 'yellow', 'purple', 'orange', 'blue', 'green', 'red'
+        const COLORS = [
+            '#00f0f0', // I
+            '#f0f000', // O
+            '#a000f0', // T
+            '#f0a000', // L
+            '#0000f0', // J
+            '#00f000', // S
+            '#f00000'  // Z
         ];
 
-        function generatePiece() {
-            const index = Math.floor(Math.random() * pieces.length);
-            return {
-                shape: pieces[index],
-                color: colors[index],
-                x: Math.floor(cols / 2) - 1,
-                y: 0
-            };
+        class Piece {
+            constructor(shape, color) {
+                this.shape = shape;
+                this.color = color;
+                this.x = Math.floor(BOARD_WIDTH / 2) - Math.floor(shape[0].length / 2);
+                this.y = 0;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                this.shape.forEach((row, dy) => {
+                    row.forEach((value, dx) => {
+                        if (value) {
+                            ctx.fillRect((this.x + dx) * BLOCK_SIZE, (this.y + dy) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                            ctx.strokeStyle = '#fff';
+                            ctx.strokeRect((this.x + dx) * BLOCK_SIZE, (this.y + dy) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                        }
+                    });
+                });
+            }
+
+            drawGhost() {
+                let ghostY = this.y;
+                while (!this.checkCollision(this.x, ghostY + 1, this.shape)) {
+                    ghostY++;
+                }
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = 0.3; // 降低透明度以显示预测
+                this.shape.forEach((row, dy) => {
+                    row.forEach((value, dx) => {
+                        if (value) {
+                            ctx.fillRect((this.x + dx) * BLOCK_SIZE, (ghostY + dy) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                            ctx.strokeStyle = '#fff';
+                            ctx.strokeRect((this.x + dx) * BLOCK_SIZE, (ghostY + dy) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                        }
+                    });
+                });
+                ctx.globalAlpha = 1.0; // 恢复透明度
+            }
+
+            move(dx, dy) {
+                if (!this.checkCollision(this.x + dx, this.y + dy, this.shape)) {
+                    this.x += dx;
+                    this.y += dy;
+                    return true;
+                }
+                return false;
+            }
+
+            rotate() {
+                const rotated = this.shape[0].map((_, index) =>
+                    this.shape.map(row => row[index]).reverse()
+                );
+                if (!this.checkCollision(this.x, this.y, rotated)) {
+                    this.shape = rotated;
+                }
+            }
+
+            checkCollision(x, y, shape) {
+                for (let dy = 0; dy < shape.length; dy++) {
+                    for (let dx = 0; dx < shape[dy].length; dx++) {
+                        if (shape[dy][dx]) {
+                            const newX = x + dx;
+                            const newY = y + dy;
+                            if (newX < 0 || newX >= BOARD_WIDTH || newY >= BOARD_HEIGHT || (newY >= 0 && board[newY][newX])) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+        }
+
+        function spawnPiece() {
+            if (!nextPiece) {
+                const index = Math.floor(Math.random() * SHAPES.length);
+                nextPiece = new Piece(SHAPES[index], COLORS[index]);
+            }
+            currentPiece = nextPiece;
+            const index = Math.floor(Math.random() * SHAPES.length);
+            nextPiece = new Piece(SHAPES[index], COLORS[index]);
+            if (currentPiece.checkCollision(currentPiece.x, currentPiece.y, currentPiece.shape)) {
+                gameOver = true;
+            }
+            drawNextPiece();
         }
 
         function drawBoard() {
-            ctx.fillStyle = '#555';
+            ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    if (board[r][c]) {
-                        ctx.fillStyle = board[r][c];
-                        ctx.fillRect(c * gridSize, r * gridSize, gridSize - 1, gridSize - 1);
+            for (let y = 0; y < BOARD_HEIGHT; y++) {
+                for (let x = 0; x < BOARD_WIDTH; x++) {
+                    if (board[y][x]) {
+                        ctx.fillStyle = board[y][x];
+                        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.strokeStyle = '#fff';
+                        ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
                     }
                 }
             }
         }
 
-        function drawPiece(piece, alpha = 1) {
-            ctx.globalAlpha = alpha; // 设置透明度
-            piece.shape.forEach((row, dy) => {
-                row.forEach((value, dx) => {
-                    if (value) {
-                        ctx.fillStyle = piece.color;
-                        ctx.fillRect((piece.x + dx) * gridSize, (piece.y + dy) * gridSize, gridSize - 1, gridSize - 1);
-                    }
-                });
-            });
-            ctx.globalAlpha = 1; // 重置透明度
-        }
-
-        function drawPreview() {
-            previewCtx.fillStyle = '#555';
-            previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+        function drawNextPiece() {
+            nextCtx.fillStyle = '#1a1a1a';
+            nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+            nextCtx.fillStyle = nextPiece.color;
             nextPiece.shape.forEach((row, dy) => {
                 row.forEach((value, dx) => {
                     if (value) {
-                        previewCtx.fillStyle = nextPiece.color;
-                        previewCtx.fillRect(dx * 30 + 30, dy * 30 + 30, 28, 28);
+                        nextCtx.fillRect(dx * BLOCK_SIZE, dy * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                        nextCtx.strokeStyle = '#fff';
+                        nextCtx.strokeRect(dx * BLOCK_SIZE, dy * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
                     }
                 });
             });
         }
 
-        function drawShadow() {
-            let shadowY = currentPiece.y;
-            while (canMove(currentPiece, 0, 1, shadowY)) {
-                shadowY++;
-            }
-            drawPiece({ ...currentPiece, y: shadowY }, 0.3); // 透明度为0.3
-        }
-
-        function canMove(piece, dx, dy, y = piece.y) {
-            return piece.shape.every((row, dyOffset) => {
-                return row.every((value, dxOffset) => {
-                    if (!value) return true;
-                    const newX = piece.x + dx + dxOffset;
-                    const newY = y + dy + dyOffset;
-                    return newX >= 0 && newX < cols && newY < rows && (newY < 0 || !board[newY][newX]);
-                });
-            });
-        }
-
-        function mergePiece(piece) {
-            piece.shape.forEach((row, dy) => {
+        function mergePiece() {
+            currentPiece.shape.forEach((row, dy) => {
                 row.forEach((value, dx) => {
                     if (value) {
-                        const r = piece.y + dy;
-                        const c = piece.x + dx;
-                        if (r >= 0) board[r][c] = piece.color;
+                        board[currentPiece.y + dy][currentPiece.x + dx] = currentPiece.color;
                     }
                 });
             });
@@ -184,131 +282,159 @@
 
         function clearLines() {
             let linesCleared = 0;
-            for (let r = rows - 1; r >= 0; r--) {
-                if (board[r].every(cell => cell)) {
-                    board.splice(r, 1);
-                    board.unshift(Array(cols).fill(0));
+            for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+                if (board[y].every(cell => cell !== 0)) {
+                    board.splice(y, 1);
+                    board.unshift(Array(BOARD_WIDTH).fill(0));
                     linesCleared++;
-                    r++;
+                    y++;
                 }
             }
-            return linesCleared;
-        }
-
-        function rotatePiece(piece) {
-            const rotated = piece.shape[0].map((_, index) =>
-                piece.shape.map(row => row[index]).reverse()
-            );
-            if (canMove({ ...piece, shape: rotated }, 0, 0)) {
-                piece.shape = rotated;
+            if (linesCleared > 0) {
+                score += linesCleared * 100;
+                scoreElement.textContent = `Score: ${score}`;
             }
         }
 
-        function instantDrop() {
-            let shadowY = currentPiece.y;
-            while (canMove(currentPiece, 0, 1, shadowY)) {
-                shadowY++;
+        function hardDrop() {
+            let dropY = currentPiece.y;
+            while (!currentPiece.checkCollision(currentPiece.x, dropY + 1, currentPiece.shape)) {
+                dropY++;
             }
-            currentPiece.y = shadowY;
-            mergePiece(currentPiece);
+            currentPiece.y = dropY;
+            mergePiece();
             clearLines();
-            currentPiece = nextPiece;
-            nextPiece = generatePiece();
-            if (!canMove(currentPiece, 0, 0)) {
-                gameOver = true;
-            }
+            spawnPiece();
         }
 
         function update(time = 0) {
-            if (gameOver || paused) return;
-            const deltaTime = time - lastTime;
-            lastTime = time;
+            if (gameOver) {
+                gameOverElement.style.display = 'block';
+                finalScoreElement.textContent = score;
+                return;
+            }
+            if (isPaused) return;
+
+            const deltaTime = time - lastDropTime;
             dropCounter += deltaTime;
-            if (dropCounter > dropInterval) {
-                if (canMove(currentPiece, 0, 1)) {
-                    currentPiece.y++;
+
+            let speed = dropSpeed;
+            if (isDownHeld) {
+                if (downKeyPresses >= 2) {
+                    speed = 50; // 飞快下落
                 } else {
-                    mergePiece(currentPiece);
+                    speed = 200; // 加速下落
+                }
+            }
+
+            if (dropCounter > speed) {
+                if (!currentPiece.move(0, 1)) {
+                    mergePiece();
                     clearLines();
-                    currentPiece = nextPiece;
-                    nextPiece = generatePiece();
-                    if (!canMove(currentPiece, 0, 0)) {
-                        gameOver = true;
-                    }
+                    spawnPiece();
                 }
                 dropCounter = 0;
             }
+            lastDropTime = time;
+
             drawBoard();
-            drawShadow();
-            drawPiece(currentPiece);
-            drawPreview();
+            currentPiece.drawGhost();
+            currentPiece.draw();
+
             requestAnimationFrame(update);
         }
 
-        function initGame() {
-            currentPiece = generatePiece();
-            nextPiece = generatePiece();
+        function startGame() {
             gameOver = false;
-            paused = false;
-            board = Array(rows).fill().map(() => Array(cols).fill(0));
-            lastTime = 0;
-            dropCounter = 0;
+            isPaused = false;
+            board = Array(BOARD_HEIGHT).fill().map(() => Array(BOARD_WIDTH).fill(0));
+            score = 0;
+            scoreElement.textContent = `Score: ${score}`;
+            gameOverElement.style.display = 'none';
+            spawnPiece();
             update();
         }
 
-        // 按键控制
-        document.addEventListener('keydown', (e) => {
-            if (gameOver) return;
-            if (e.key === 'ArrowLeft' && canMove(currentPiece, -1, 0)) {
-                currentPiece.x--;
-            } else if (e.key === 'ArrowRight' && canMove(currentPiece, 1, 0)) {
-                currentPiece.x++;
-            } else if (e.key === 'ArrowUp') {
-                rotatePiece(currentPiece);
-            } else if (e.key === 'ArrowDown') {
-                if (canMove(currentPiece, 0, 1)) {
-                    currentPiece.y++;
+        function showTutorial() {
+            tutorialElement.style.display = 'block';
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (tutorialElement.style.display === 'block') {
+                if (event.key === 'Enter') {
+                    tutorialElement.style.display = 'none';
+                    startGame();
                 }
-                downPressCount++;
-                if (!downPressTimer) {
-                    downPressTimer = setTimeout(() => {
-                        downPressCount = 0;
-                        downPressTimer = null;
-                    }, 300); // 300ms 内检测三连按
+                return;
+            }
+
+            if (gameOver) {
+                if (event.key === 'Enter') {
+                    startGame();
                 }
-                if (downPressCount === 3) {
-                    instantDrop();
-                    downPressCount = 0;
-                    clearTimeout(downPressTimer);
-                    downPressTimer = null;
+                return;
+            }
+
+            if (!isPaused) {
+                if (event.key === 'ArrowLeft') {
+                    currentPiece.move(-1, 0);
+                } else if (event.key === 'ArrowRight') {
+                    currentPiece.move(1, 0);
+                } else if (event.key === 'ArrowUp') {
+                    currentPiece.rotate();
+                } else if (event.key === 'ArrowDown') {
+                    const now = Date.now();
+                    if (now - downKeyLastPressTime < 300) {
+                        downKeyPresses++;
+                    } else {
+                        downKeyPresses = 1;
+                    }
+                    downKeyLastPressTime = now;
+                    isDownHeld = true;
+
+                    if (downKeyPresses === 3) {
+                        hardDrop();
+                        downKeyPresses = 0;
+                    }
+                } else if (event.key === 'p' || event.key === 'P') {
+                    isPaused = !isPaused;
+                    pauseButton.textContent = isPaused ? 'Resume' : 'Pause';
+                } else if (event.key === 'Enter') {
+                    if (confirm('Do you want to restart the game?')) {
+                        startGame();
+                    }
                 }
-            } else if (e.key === ' ') {
-                paused = !paused;
-                if (!paused) update();
-            } else if (e.key === 'Enter') {
-                document.getElementById('tutorial').style.display = 'none';
+            } else if (event.key === 'p' || event.key === 'P') {
+                isPaused = false;
+                pauseButton.textContent = 'Pause';
+                update();
             }
         });
 
-        // 按钮控制
-        document.getElementById('pause-btn').addEventListener('click', () => {
-            paused = !paused;
-            if (!paused) update();
+        document.addEventListener('keyup', (event) => {
+            if (event.key === 'ArrowDown') {
+                isDownHeld = false;
+                downKeyPresses = 0;
+            }
         });
 
-        document.getElementById('speed-up-btn').addEventListener('click', () => {
-            dropInterval = Math.max(100, dropInterval - 100); // 最快100ms
+        pauseButton.addEventListener('click', () => {
+            if (!gameOver) {
+                isPaused = !isPaused;
+                pauseButton.textContent = isPaused ? 'Resume' : 'Pause';
+                if (!isPaused) update();
+            }
         });
 
-        document.getElementById('speed-down-btn').addEventListener('click', () => {
-            dropInterval += 100; // 减慢速度
+        speedUpButton.addEventListener('click', () => {
+            dropSpeed = Math.max(100, dropSpeed - 100);
         });
 
-        // 教程显示
-        document.getElementById('tutorial').style.display = 'block';
+        speedDownButton.addEventListener('click', () => {
+            dropSpeed += 100;
+        });
 
-        // 启动游戏
-        initGame();
+        showTutorial();
     </script>
 </body>
 </html>
