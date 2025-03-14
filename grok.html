@@ -10,9 +10,10 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-color: #f0f0f0;
+            background-color: #333; /* 偏黑色背景 */
             margin: 0;
             font-family: Arial, sans-serif;
+            color: #fff; /* 文字颜色改为白色以对比背景 */
         }
         .game-container {
             display: flex;
@@ -20,12 +21,39 @@
             align-items: center;
         }
         canvas {
-            border: 2px solid black;
+            border: 2px solid #fff; /* 边框颜色改为白色以对比背景 */
             background-color: #fff;
         }
         .score {
             font-size: 24px;
             margin-bottom: 10px;
+        }
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #555;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #777;
+        }
+        .next-piece {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #next-piece-canvas {
+            border: 2px solid #fff;
+            background-color: #fff;
         }
     </style>
 </head>
@@ -33,18 +61,32 @@
     <div class="game-container">
         <div class="score">Score: <span id="score">0</span></div>
         <canvas id="tetris" width="240" height="400"></canvas>
+        <div class="next-piece">
+            <div>Next Piece:</div>
+            <canvas id="next-piece-canvas" width="80" height="80"></canvas>
+        </div>
+        <div class="controls">
+            <button id="pause">Pause</button>
+            <button id="speed-up">Speed Up</button>
+            <button id="speed-down">Speed Down</button>
+        </div>
     </div>
 
     <script>
         const canvas = document.getElementById('tetris');
         const context = canvas.getContext('2d');
+        const nextPieceCanvas = document.getElementById('next-piece-canvas');
+        const nextPieceContext = nextPieceCanvas.getContext('2d');
         const scoreElement = document.getElementById('score');
+        const pauseButton = document.getElementById('pause');
+        const speedUpButton = document.getElementById('speed-up');
+        const speedDownButton = document.getElementById('speed-down');
 
         // 游戏设置
         const BLOCK_SIZE = 20;
         const BOARD_WIDTH = 12;
         const BOARD_HEIGHT = 20;
-        const DROP_SPEED = 1000; // 方块下降速度（毫秒）
+        let DROP_SPEED = 1000; // 方块下降速度（毫秒），初始值
 
         // 颜色定义
         const COLORS = [
@@ -76,7 +118,9 @@
         let dropCounter = 0;
         let lastTime = 0;
         let gameOver = false;
+        let isPaused = false;
         let currentPiece = null;
+        let nextPiece = null;
 
         // 生成新方块
         function createPiece() {
@@ -104,12 +148,26 @@
         }
 
         // 绘制当前方块
-        function drawPiece(piece) {
+        function drawPiece(piece, ctx, offsetX = 0, offsetY = 0) {
             piece.shape.forEach((row, dy) => {
                 row.forEach((value, dx) => {
                     if (value) {
-                        context.fillStyle = piece.color;
-                        context.fillRect((piece.x + dx) * BLOCK_SIZE, (piece.y + dy) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                        ctx.fillStyle = piece.color;
+                        ctx.fillRect((piece.x + dx + offsetX) * BLOCK_SIZE, (piece.y + dy + offsetY) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                    }
+                });
+            });
+        }
+
+        // 绘制下一个方块
+        function drawNextPiece() {
+            nextPieceContext.fillStyle = '#fff';
+            nextPieceContext.fillRect(0, 0, nextPieceCanvas.width, nextPieceCanvas.height);
+            nextPiece.shape.forEach((row, dy) => {
+                row.forEach((value, dx) => {
+                    if (value) {
+                        nextPieceContext.fillStyle = nextPiece.color;
+                        nextPieceContext.fillRect(dx * BLOCK_SIZE + 10, dy * BLOCK_SIZE + 10, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
                     }
                 });
             });
@@ -190,7 +248,7 @@
 
         // 游戏循环
         function update(time = 0) {
-            if (gameOver) return;
+            if (gameOver || isPaused) return;
 
             const deltaTime = time - lastTime;
             lastTime = time;
@@ -200,7 +258,9 @@
                 if (!movePiece(0, 1)) {
                     merge(currentPiece);
                     sweep();
-                    currentPiece = createPiece();
+                    currentPiece = nextPiece;
+                    nextPiece = createPiece();
+                    drawNextPiece();
                     if (collide(currentPiece, board)) {
                         gameOver = true;
                         alert(`Game Over! Your score: ${score}`);
@@ -211,13 +271,13 @@
             }
 
             drawBoard();
-            drawPiece(currentPiece);
+            drawPiece(currentPiece, context);
             requestAnimationFrame(update);
         }
 
         // 键盘控制
         document.addEventListener('keydown', event => {
-            if (gameOver) return;
+            if (gameOver || isPaused) return;
             if (event.key === 'ArrowLeft') {
                 movePiece(-1, 0);
             } else if (event.key === 'ArrowRight') {
@@ -229,8 +289,33 @@
             }
         });
 
+        // 暂停/继续按钮
+        pauseButton.addEventListener('click', () => {
+            if (gameOver) return;
+            isPaused = !isPaused;
+            pauseButton.textContent = isPaused ? 'Resume' : 'Pause';
+            if (!isPaused) {
+                lastTime = performance.now();
+                update();
+            }
+        });
+
+        // 加速按钮
+        speedUpButton.addEventListener('click', () => {
+            if (DROP_SPEED > 200) { // 设置最小速度限制
+                DROP_SPEED -= 100;
+            }
+        });
+
+        // 减速按钮
+        speedDownButton.addEventListener('click', () => {
+            DROP_SPEED += 100; // 没有设置最大速度限制
+        });
+
         // 初始化游戏
         currentPiece = createPiece();
+        nextPiece = createPiece();
+        drawNextPiece();
         update();
     </script>
 </body>
