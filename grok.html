@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>压枪训练小游戏</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+            color: white;
+            user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 2px solid #fff;
+            background-color: #333;
+            cursor: none; /* 隐藏默认鼠标光标 */
+        }
+        #crosshair {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: transparent;
+            border: 2px solid red;
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+        #target {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: green;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+        }
+        #timer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+        }
+        #game-over h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        #game-over button {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="crosshair"></div>
+        <div id="target"></div>
+        <div id="score">得分: 0</div>
+        <div id="timer">时间: 60</div>
+        <div id="game-over">
+            <h1>游戏结束</h1>
+            <p>最终得分: <span id="final-score">0</span></p>
+            <button onclick="restartGame()">重新开始</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const crosshair = document.getElementById('crosshair');
+        const target = document.getElementById('target');
+        const scoreDisplay = document.getElementById('score');
+        const timerDisplay = document.getElementById('timer');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreDisplay = document.getElementById('final-score');
+
+        let score = 0;
+        let timeLeft = 60; // 游戏时间 60 秒
+        let gameActive = false;
+        let targetSpeed = 2; // 目标初始移动速度
+        let recoilStrength = 0.5; // 后座力初始强度
+        let targetX, targetY, crosshairX, crosshairY;
+
+        // 初始化游戏
+        function initGame() {
+            gameActive = true;
+            score = 0;
+            timeLeft = 60;
+            targetSpeed = 2;
+            recoilStrength = 0.5;
+            scoreDisplay.textContent = `得分: ${score}`;
+            timerDisplay.textContent = `时间: ${timeLeft}`;
+            gameOverScreen.style.display = 'none';
+
+            // 初始化目标位置
+            targetX = gameContainer.clientWidth / 2;
+            targetY = gameContainer.clientHeight / 2;
+            target.style.left = `${targetX}px`;
+            target.style.top = `${targetY}px`;
+
+            // 初始化准星位置
+            crosshairX = gameContainer.clientWidth / 2;
+            crosshairY = gameContainer.clientHeight / 2;
+            crosshair.style.left = `${crosshairX}px`;
+            crosshair.style.top = `${crosshairY}px`;
+
+            startGameLoop();
+            startTimer();
+        }
+
+        // 游戏主循环
+        function startGameLoop() {
+            if (!gameActive) return;
+
+            // 模拟后座力（准星向下偏移）
+            crosshairY += recoilStrength;
+            crosshair.style.top = `${crosshairY}px`;
+
+            // 移动目标
+            moveTarget();
+
+            // 检查准星是否在目标范围内
+            const distance = Math.sqrt(
+                Math.pow(crosshairX - targetX, 2) + Math.pow(crosshairY - targetY, 2)
+            );
+            if (distance < 40) { // 准星与目标的距离小于目标半径 + 准星半径
+                score += 1;
+                scoreDisplay.textContent = `得分: ${score}`;
+            }
+
+            // 难度递增
+            targetSpeed += 0.001;
+            recoilStrength += 0.0005;
+
+            requestAnimationFrame(startGameLoop);
+        }
+
+        // 移动目标
+        function moveTarget() {
+            const maxX = gameContainer.clientWidth - 40;
+            const maxY = gameContainer.clientHeight - 40;
+            const minX = 40;
+            const minY = 40;
+
+            // 随机移动方向
+            targetX += (Math.random() - 0.5) * targetSpeed * 2;
+            targetY += (Math.random() - 0.5) * targetSpeed * 2;
+
+            // 边界检测
+            targetX = Math.max(minX, Math.min(maxX, targetX));
+            targetY = Math.max(minY, Math.min(maxY, targetY));
+
+            target.style.left = `${targetX}px`;
+            target.style.top = `${targetY}px`;
+        }
+
+        // 计时器
+        function startTimer() {
+            const timer = setInterval(() => {
+                if (!gameActive) {
+                    clearInterval(timer);
+                    return;
+                }
+                timeLeft -= 1;
+                timerDisplay.textContent = `时间: ${timeLeft}`;
+                if (timeLeft <= 0) {
+                    endGame();
+                    clearInterval(timer);
+                }
+            }, 1000);
+        }
+
+        // 结束游戏
+        function endGame() {
+            gameActive = false;
+            gameOverScreen.style.display = 'block';
+            finalScoreDisplay.textContent = score;
+        }
+
+        // 重新开始游戏
+        function restartGame() {
+            initGame();
+        }
+
+        // 鼠标移动控制准星
+        gameContainer.addEventListener('mousemove', (e) => {
+            if (!gameActive) return;
+            const rect = gameContainer.getBoundingClientRect();
+            crosshairX = e.clientX - rect.left;
+            crosshairY = e.clientY - rect.top;
+            crosshair.style.left = `${crosshairX}px`;
+            crosshair.style.top = `${crosshairY}px`;
+        });
+
+        // 开始游戏
+        initGame();
+    </script>
+</body>
+</html>
